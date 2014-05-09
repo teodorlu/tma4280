@@ -1,0 +1,244 @@
+\documentclass[11pt]{article}
+\bibliographystyle{plain}
+\usepackage{geometry} % see geometry.pdf on how to lay out the page. There's lots.
+\usepackage{amsmath,amssymb} 
+\usepackage{epsfig,epsf,subfigure}
+\geometry{a4paper} 
+
+
+%\documentclass{article}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1ex plus 0.5ex minus 0.2ex}
+
+\begin{document}
+ 
+\LARGE
+\begin{center}
+TMA4280: Introduction to Supercomputing
+\end{center}
+\vspace{1in}
+
+\begin{center}
+{\bf Suggested solutions} \\
+Problem set 5
+\end{center}
+
+\Large
+\vspace{0.5in}
+\begin{center}
+Spring 2014
+\end{center}
+
+\vspace{0.5in}
+
+\begin{center}
+\copyright Einar M. R{\o}nquist \\
+Department of Mathematical Sciences\\
+NTNU, N-7491 Trondheim, Norway\\
+All rights reserved
+\end{center}
+
+\large
+
+\newpage
+
+\subsection*{Exercise 1}
+
+(a) Message passing is obviously of interest for multi-process systems
+of the type Multiple Instruction Multiple Data (MIMD) with distributed memory. 
+
+Message passing is also of interest for shared-memory MIMD computers 
+where the entire memory is available using a global address space.
+The reason for this is that the use of a Message Passing Interface (MPI)
+forces one to focus on data distribution and data locality.
+Programs developed for MIMD machines with distributed memory, 
+and which perform well on this type of architecture, will generally
+also perform very well on shared memory MIMD machines.
+
+(b) One of the advantages of using a standardized communication library
+(such as MPI) is to ensure that the program is {\em portable}.
+Most computer manufacturers will install MPI on their multi-process
+systems. A program which is written using MPI will therefore not have to be 
+rewritten to run on a new multi-process system. 
+Another advantage with using MPI is that it makes it possible to 
+perform parallel computations on a heterogeneous multi-process system. 
+Last, but not least, it is of interest to be able to separate the machine specific 
+implementation from the generic functionality. A user can thus 
+focus on the data distribution and algorithmic aspects 
+of the parallel computation. 
+Optimization of the communication library can take place 
+independently by specialists with good knowledge about the 
+specific machine architecture. Hence, a user is able to 
+obtain an overall good performance. 
+
+(c) Point-to-point, one-to-all, all-to-one, and all-to-all 
+type of communication.
+
+(d) The program segment will result in a deadlock.
+The \texttt{\small MPI\_Send} and \texttt{\small MPI\_Recv} operations
+are of blocking type. This means that each process will wait 
+until the associated data is received from the neighboring process.
+With the program segment in its current form, the program will hang. 
+One possible solution is to reorder the send and receive 
+commands on {\em one} of the processes. 
+(Actually, the program will probably work also if we reorder
+the send and receive on both processors, but this is generally 
+not a safe implementation.)
+
+
+\subsection*{Exercise 2}
+
+(a) We need to find  the value of $k$ that gives $\tau_C(k) \approx 2\,\tau_S$.
+With the given values, we get $k=800 \, bytes$. With 8 bytes per
+floating-point number (double precision), this corresponds to sending 
+a message with 100 floating-point numbers.
+
+(b) The time to send a single floating-point number is 
+$\tau_C(8) \approx \tau_S$.
+The time to send 100 floating-point numbers is just twice this amount. 
+Hence, if possible, it is preferable to send a single, long message. 
+Each short message implies a large startup cost, 
+and the sum of all the startup costs will dominate 
+the total communication cost.
+
+\subsection*{Exercise 3}
+
+The matrix-matrix product $\underline{A}\,\underline{B}$ takes $2n^3$ floating point operations (multiplications and additions). 
+Hence, constructing $\underline{D}$ takes $6n^3 + n^2$ operations, 
+or approximately $6n^3$ operations when $n\gg 1$. 
+
+
+\end{document}
+
+
+\subsection*{Exercise 1}
+
+A plot of the measured transfer rate is shown in Figure 1.
+The data is generated from the attached program and fit to the following 
+simple model for the time $\tau_C(n)$ it takes to send $n$ bytes between 
+two processors:
+\begin{eqnarray}
+\tau_C(n) = \tau_s + \beta \cdot n \,\,\, .
+\end{eqnarray}
+Using the observed data for $n=1$ and $n\gg 1$, we obtain the 
+following estimates for the startup time $\tau_s$
+and the inverse bandwidth $\beta$:
+\begin{eqnarray}
+\tau_s &\simeq & 5.8\,\, \mu s \\
+\beta  &\simeq & 4.1\,\,ns/byte \,\,\, .
+\end{eqnarray}
+
+Compared to the time to do a floating point operation, $\tau_A$,
+we estimate the ratio $\tau_s / \tau_A \simeq \tau_C(1)/\tau_A$ 
+to be ${\cal O}(1000)$ on gridur. 
+
+The simple model (1) seems to be reasonable.
+From the measured data, the bandwidth of the interconnect 
+appears to be approximately 250 MBytes per second.
+This a less than maximum theoretical bandwidth of the interconnect,
+but not unreasonable. \\
+
+{\bf NOTE}: the reported experiments were 
+done in the fall of 2001.
+
+
+ \begin{figure}[htbp]
+  \begin{center}
+    \includegraphics[scale=0.65]{pp_log}
+  \end{center}
+  \caption{A plot of the communication speed on the SGI Origin 3800
+  at NTNU. The plot shows the transfer rate  measured by sending 
+a message of $n$ nytes between two processors. A simple model 
+has been fit to the data.}
+\label{Figure1}
+\end{figure}
+
+
+\newpage
+
+\begin{verbatim}
+
+PROGRAM LISTING OF THE PING-PONG TEST
+
+#include <stddef.h>
+#include <stdlib.h>
+#include <math.h>
+#include "mpi.h"
+
+main(int argc, char **argv )
+{
+  char *message;
+  int i, j, n, nmax, maxpower, m;
+  int rank, rankA, rankB, root, size, tag=99;
+  double t1, t2, dt, tm, *b;
+  MPI_Status status;
+  
+  MPI_Init(&argc, &argv);
+  MPI_Comm_size(MPI_COMM_WORLD,&size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  n = 1;
+  m = 10000;
+  maxpower = 20;
+  b = (double *)malloc(maxpower*sizeof(double));
+  nmax = (int)pow(2,maxpower);
+  message = (char *)malloc(nmax*sizeof(char));
+  for (i=0; i < nmax; i++) { message[i] = 'x'; }
+
+  if (rank == 0) {
+    printf (" # of message exchanges = %d \n", m);
+  }
+  
+  rankA = 0;
+  rankB = size-1;
+  root  = rankA;
+
+  for (j=0; j < maxpower; j++) {
+    
+    t1 = MPI_Wtime();
+    
+    for (i=0; i < m; i++) {
+      if(rank == rankA) {
+        MPI_Send(message, n, MPI_CHAR, rankB, 
+                 tag, MPI_COMM_WORLD);      
+        MPI_Recv(message, n, MPI_CHAR, MPI_ANY_SOURCE,
+                 tag, MPI_COMM_WORLD, &status);
+      }
+      else {
+        MPI_Recv(message, n, MPI_CHAR, rankA,
+                 tag, MPI_COMM_WORLD, &status);
+        
+        MPI_Send(message, n, MPI_CHAR, rankA, 
+                 tag, MPI_COMM_WORLD);
+      }
+    }
+    
+    t2 = MPI_Wtime();
+    
+    if (rank == root) {
+      dt = t2 - t1;
+      tm = dt/(2*n*m);
+      b[j]  = 1./tm;
+    }
+    n = n*2;
+  }
+  free (message);
+  message = NULL;
+
+  if (rank == root) {
+    n = 1;
+    for (j=0; j < maxpower; j++) {
+      printf (" %d  %10.3e \n",n,b[j]);
+      n = n*2;
+    }
+  }
+  free (b);
+
+  MPI_Finalize();
+}
+
+\end{verbatim}
+
+\newpage
+
